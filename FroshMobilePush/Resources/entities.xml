@@ -1,11 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <entities xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
           xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/shopware/shopware/trunk/src/Core/System/CustomEntity/Xml/entity-1.0.xsd">
-    <!-- One row per Android device; the Boutique Manager app upserts its FCM
-         registration token here via the Admin API (POST /api/ce-fcn). -->
+    <!-- One row per device; the Shop Manager app upserts its push token here via the Admin API
+         (POST /api/ce-fcn). `platform` selects delivery: "apns" for Apple devices (raw APNs token),
+         "fcm" (or absent, for legacy Android rows) for an FCM registration token. -->
     <entity name="ce_fcn">
         <fields>
             <string name="token" required="true" store-api-aware="false"/>
+            <string name="platform" store-api-aware="false"/>
             <string name="deviceName" store-api-aware="false"/>
         </fields>
     </entity>

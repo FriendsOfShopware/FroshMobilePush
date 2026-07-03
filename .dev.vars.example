@@ -4,6 +4,21 @@
 # SHOPWARE_APP_SECRET is NOT here — it's a plain var in wrangler.jsonc (the app
 # is not published to the Shopware store, so the setup secret is hard-coded).
 
+# --- Android (FCM) ---------------------------------------------------------
 # Firebase service account JSON on a single line
 # (Firebase console → Project settings → Service accounts → Generate new private key)
+# Optional if you only serve Apple devices.
 FCM_SERVICE_ACCOUNT={"type":"service_account","project_id":"...","private_key":"-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n","client_email":"...","token_uri":"https://oauth2.googleapis.com/token"}
+
+# --- Apple (native APNs) ---------------------------------------------------
+# APNs Auth Key (.p8) — Apple Developer → Keys → create an Apple Push Notification key.
+# Paste the .p8 contents with literal \n for newlines (single line). Optional if you
+# only serve Android devices.
+APNS_KEY_P8="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+# The 10-char Key ID of that .p8, and your 10-char Apple Team ID.
+APNS_KEY_ID=ABCDE12345
+APNS_TEAM_ID=3NS24VW6GA
+# The app bundle id (sent as apns-topic).
+APNS_TOPIC=de.shyim.shopware
+# "true" only when testing against a development/sandbox APNs environment.
+APNS_SANDBOX=false

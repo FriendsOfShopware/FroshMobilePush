@@ -9,7 +9,7 @@
         <description lang="de-DE">Sendet eine sofortige Push-Benachrichtigung an die Shopware-Shop-Manager-Android-App, sobald ein Kunde bestellt, damit Shopbetreiber in Echtzeit über neue Bestellungen Bescheid wissen.</description>
         <author>FriendsOfShopware</author>
         <copyright>(c) FriendsOfShopware</copyright>
-        <version>1.0.0</version>
+        <version>1.1.0</version>
         <license>MIT</license>
         <icon>Resources/config/plugin.png</icon>
     </meta>
