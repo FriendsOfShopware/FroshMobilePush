@@ -9,12 +9,15 @@ import { Criteria } from "@shopware-ag/app-server-sdk/helper/criteria";
 import { HttpClient } from "@shopware-ag/app-server-sdk";
 import type { Context, ShopInterface } from "@shopware-ag/app-server-sdk";
 import { parseServiceAccount, sendPush } from "./fcm";
+import { parseApnsConfig, sendApnsPush, type ApnsEnv } from "./apns";
 
 type Env = CloudflareBindings;
 
 interface FcnEntry {
   id: string;
   token: string;
+  /** "apns" → deliver natively via APNs; anything else (incl. null, legacy rows) → FCM. */
+  platform?: string | null;
   deviceName?: string | null;
 }
 
@@ -77,7 +80,14 @@ async function syncTokenCache(env: Env, httpClient: HttpClient, shopId: string):
     criteria.setLimit(100);
     criteria.setPage(page);
     const result = await repository.search(criteria);
-    devices.push(...result.data.map((d) => ({ id: d.id, token: d.token, deviceName: d.deviceName })));
+    devices.push(
+      ...result.data.map((d) => ({
+        id: d.id,
+        token: d.token,
+        platform: d.platform,
+        deviceName: d.deviceName,
+      })),
+    );
     if (result.data.length < 100) {
       break;
     }
@@ -113,8 +123,6 @@ async function notifyDevices(
     return;
   }
 
-  const account = parseServiceAccount(env.FCM_SERVICE_ACCOUNT);
-
   const customer = [order.orderCustomer?.firstName, order.orderCustomer?.lastName]
     .filter(Boolean)
     .join(" ");
@@ -127,21 +135,36 @@ async function notifyDevices(
 
   const title = order.orderNumber ? `New order #${order.orderNumber}` : "New order";
   const body = [customer, amount].filter(Boolean).join(" • ") || "An order was just placed.";
+  const data = {
+    event: "order.placed",
+    shopId,
+    shopUrl,
+    orderId: order.id ?? "",
+    orderNumber: order.orderNumber ?? "",
+  };
+
+  // Parse each provider config lazily — a shop with only APNs devices needs no FCM creds, and vice
+  // versa. Errors here (missing secret) are logged per-device rather than failing the whole batch.
+  const account = env.FCM_SERVICE_ACCOUNT ? parseServiceAccount(env.FCM_SERVICE_ACCOUNT) : null;
+  let apns: ReturnType<typeof parseApnsConfig> | null = null;
+  try {
+    // APNS_* are worker secrets, not committed vars, so they aren't in the generated env type.
+    apns = parseApnsConfig(env as unknown as ApnsEnv);
+  } catch {
+    apns = null;
+  }
 
   const staleIds: string[] = [];
   const results = await Promise.allSettled(
     devices.map(async (device) => {
-      const result = await sendPush(account, {
-        token: device.token,
-        notification: { title, body },
-        data: {
-          event: "order.placed",
-          shopId,
-          shopUrl,
-          orderId: order.id ?? "",
-          orderNumber: order.orderNumber ?? "",
-        },
-      });
+      let result: "ok" | "unregistered" | "error";
+      if (device.platform === "apns") {
+        if (!apns) throw new Error(`device ${device.id} is apns but APNS_* secrets are unset`);
+        result = await sendApnsPush(apns, { token: device.token, title, body, data });
+      } else {
+        if (!account) throw new Error(`device ${device.id} is fcm but FCM_SERVICE_ACCOUNT is unset`);
+        result = await sendPush(account, { token: device.token, notification: { title, body }, data });
+      }
       if (result === "unregistered") {
         staleIds.push(device.id);
       }

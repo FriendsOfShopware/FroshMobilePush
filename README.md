@@ -59,8 +59,12 @@ The rest of this document is for **developers** working on the gateway itself.
   `@shopware-ag/app-server-sdk`, whose `configureAppServer` handles the registration handshake,
   app lifecycle webhooks, and request signing/verification under `/app/*`. The order webhook
   responds immediately and fans out the pushes in the background.
-- `src/fcm.ts` — a minimal FCM HTTP v1 client: signs a short-lived JWT from the Firebase service
-  account, caches the OAuth token, and reports tokens FCM considers stale so they can be cleaned up.
+- `src/fcm.ts` — a minimal FCM HTTP v1 client (Android devices): signs a short-lived JWT from the
+  Firebase service account, caches the OAuth token, and reports tokens FCM considers stale.
+- `src/apns.ts` — a native APNs client (Apple devices): signs an ES256 provider token from your
+  APNs Auth Key (`.p8`) and HTTP/2-POSTs to `api.push.apple.com`; a `410 Gone` marks a dead token.
+  The Worker branches per device on `ce_fcn.platform` (`apns` → APNs, else FCM), so you can serve
+  both platforms — or only one (leave the other's secrets unset).
 - `FroshMobilePush/` — the Shopware app that shops install. Its `manifest.xml`
   declares the registration URL, the `checkout.order.placed` webhook, and the required
   permissions; `Resources/entities.xml` defines the `ce_fcn` entity that stores each device's
@@ -83,8 +87,11 @@ shop and the cache.
 ## App ↔ gateway contract
 
 1. **Register a device** — `POST /api/ce-fcn` against the shop's Admin API with
-   `{"token": "<fcm registration token>", "deviceName": "Pixel 9"}` (upsert with a stable id per
-   install; ACL key `ce_fcn`). A newly registered device starts receiving pushes within 5 minutes.
-2. **Receive the push** — the FCM `notification` carries `New order #1001 / <customer> • <amount>`;
-   the `data` payload carries `event=order.placed`, `shopId`, `shopUrl`, `orderId`, `orderNumber`
-   (all strings) for deep-linking into the order detail screen.
+   `{"token": "<token>", "platform": "apns" | "fcm", "deviceName": "iPhone 17"}` (upsert with a
+   stable id per install; ACL key `ce_fcn`). `platform` selects the delivery path: `apns` for a raw
+   Apple device token, anything else (or absent, for legacy Android rows) for an FCM token. A newly
+   registered device starts receiving pushes within 5 minutes.
+2. **Receive the push** — the alert carries `New order #1001 / <customer> • <amount>`; the payload
+   carries `event=order.placed`, `shopId`, `shopUrl`, `orderId`, `orderNumber` (all strings) for
+   deep-linking into the order detail screen. On APNs these ride alongside `aps`; on FCM they're the
+   `data` block.
